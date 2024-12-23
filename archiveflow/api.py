@@ -3,21 +3,20 @@ import hmac
 import logging
 import re
 import threading
+from typing import Any
 import time
-import io
 import webbrowser
-import xml.etree.ElementTree as ET
 from hashlib import sha512
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Union
 from urllib.parse import parse_qs, quote_plus, urlencode, urlparse, urlunparse
-from xml.etree.ElementTree import Element, ElementTree
 
 import requests
 from requests import Response
 
 from .config import config
+from .utils import parse_user_access_info_response
 
 
 def mask_sensitive_url(
@@ -104,7 +103,7 @@ def mask_sensitive_url(
 
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler("app.log"),
@@ -306,7 +305,7 @@ class LAClient:
             server.shutdown()
             server.server_close()
 
-    def get_uid(self) -> None:
+    def login(self) -> Response:
         auth_code: Union[str, None]
         email: Union[str, None]
         callbacks: list[str]
@@ -340,22 +339,41 @@ class LAClient:
                 )
             else:
                 response = requests.get(url)
-            tree: ElementTree = ET.parse(io.BytesIO(response.content))
-            root: Element = tree.getroot()
-            if root.tag == "users":
-                for child in root:
-                    if child.tag == "id":
-                        if isinstance(child.text, str):
-                            uid: str = child.text
-                            self.uid = uid
-                            self.is_auth = True
-                            logger.info("User authentication complete!")
-                        else:
-                            raise ValueError(
-                                "user_access_info response did not contain uid"
-                            )
+            ua_info: dict[str, Any] = parse_user_access_info_response(
+                response=response
+            )
+            self.ua_info = ua_info
+            self.is_auth = True
             self.auth_code = auth_code
             self.email = email
-            return None
+            return response
         else:
             raise ValueError("No auth_code or email returned from get_auth")
+
+    def get_notebook_tree(self, nbid: str) -> Response:
+        if not self.is_auth or not isinstance(self.email, str):
+            raise ValueError("Client is not authenticated")
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "get_tree_level",
+            expires,
+            self.access_password,
+        )
+        url: str = (
+            self.api_url
+            + "/api/tree_tools/get_tree_level"
+            + f"?uid={self.ua_info['id']}"
+            + f"&nbid={nbid}"
+            + "&parent_tree_id=0"
+            + f"&akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&sig={sig}"
+        )
+        if self.cer_filepath is not None:
+            response: Response = requests.get(
+                url, verify=str(self.cer_filepath)
+            )
+        else:
+            response = requests.get(url)
+        return response
