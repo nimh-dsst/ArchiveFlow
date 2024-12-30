@@ -3,14 +3,15 @@ import hmac
 import logging
 import re
 import threading
-from typing import Any
 import time
 import webbrowser
 from hashlib import sha512
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from io import BytesIO
 from pathlib import Path
-from typing import Union
+from typing import Any, Union
 from urllib.parse import parse_qs, quote_plus, urlencode, urlparse, urlunparse
+from xml.etree import ElementTree as ET
 
 import requests
 from requests import Response
@@ -350,9 +351,21 @@ class LAClient:
         else:
             raise ValueError("No auth_code or email returned from get_auth")
 
-    def get_notebook_tree(self, nbid: str) -> Response:
+    def get_notebook_tree(
+        self,
+        nbid: str,
+        tree_id: str = "0",
+        tree_name: str = "root",
+        parent_tree_name: str = "",
+    ) -> list[ET.Element]:
         if not self.is_auth or not isinstance(self.email, str):
             raise ValueError("Client is not authenticated")
+        all_pages: list[ET.Element] = []
+        full_path: str = (
+            parent_tree_name + "/" + tree_name
+            if parent_tree_name
+            else tree_name
+        )
         expires: int = int(time.time()) * 1000
         sig: str = generate_signature(
             self.access_key_id,
@@ -365,7 +378,78 @@ class LAClient:
             + "/api/tree_tools/get_tree_level"
             + f"?uid={self.ua_info['id']}"
             + f"&nbid={nbid}"
-            + "&parent_tree_id=0"
+            + f"&parent_tree_id={tree_id}"
+            + f"&akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&sig={sig}"
+        )
+        if self.cer_filepath is not None:
+            response: Response = requests.get(
+                url, verify=str(self.cer_filepath)
+            )
+        else:
+            response = requests.get(url)
+        tree: ET.ElementTree = ET.parse(BytesIO(response.content))
+        root: ET.Element = tree.getroot()
+        nodes: list[ET.Element] = root.findall(".//level-node")
+        for node in nodes:
+            node_tree_id: ET.Element | None = node.find("tree-id")
+            if isinstance(node_tree_id, ET.Element):
+                node_tree_id_text: str | None = node_tree_id.text
+                if node_tree_id_text is None:
+                    raise ValueError("Node tree_id has no text!")
+            else:
+                raise ValueError("Node is missing tree-id element")
+            display_name: ET.Element | None = node.find("display-text")
+            is_page: ET.Element | None = node.find("is-page")
+            if isinstance(is_page, ET.Element):
+                is_page_text: str | None = is_page.text
+                if is_page_text is None:
+                    raise ValueError("Node is-page element text is missing!")
+            else:
+                raise ValueError("Node is missing is-page element!")
+            if isinstance(display_name, ET.Element):
+                display_name_text: str | None = display_name.text
+                if display_name_text:
+                    if is_page_text == "true":
+                        node.set(
+                            "full_path", full_path + "/" + display_name_text
+                        )
+                        all_pages.append(node)
+                    elif is_page_text == "false":
+                        all_pages.extend(
+                            self.get_notebook_tree(
+                                nbid,
+                                node_tree_id_text,
+                                display_name_text,
+                                full_path,
+                            )
+                        )
+                        pass
+                    else:
+                        raise ValueError(
+                            f"Node: {display_name_text} has is-page"
+                            + f" value of {is_page_text}"
+                        )
+            else:
+                raise ValueError("Node is missing display text!")
+        return all_pages
+
+    def get_entry_data(self, nbid: str, page_tree_id: str) -> Response:
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "get_entries_for_page",
+            expires,
+            self.access_password,
+        )
+        url: str = (
+            self.api_url
+            + "/api/tree_tools/get_entries_for_page"
+            + f"?uid={self.ua_info['id']}"
+            + f"&page_tree_id={page_tree_id}"
+            + "&entry_data=true"
+            + f"&nbid={nbid}"
             + f"&akid={self.access_key_id}"
             + f"&expires={expires}"
             + f"&sig={sig}"
