@@ -1,8 +1,8 @@
-from requests import Response
-from typing import Any, Union
-from io import BytesIO
-
 import xml.etree.ElementTree as ET
+from io import BytesIO
+from typing import Any, Union
+
+from requests import Response
 
 USER_ACCESS_ELEMENTS: list[str] = [
     "id",
