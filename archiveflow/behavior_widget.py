@@ -408,7 +408,7 @@ def parse_behavior_widget(
 
 def recontruct_behavior_form(
     forms_metadata: list[dict[str, Any]], forms: list[list[dict[str, Any]]]
-) -> Any:
+) -> BehaviorFormV4 | BehaviorFormV6:
     if len(forms_metadata) > 1:
         raise ValueError("More than one form found in response!")
     if forms_metadata[0]["form_version"] == 4:

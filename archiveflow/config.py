@@ -10,11 +10,15 @@ class Config:
         api_url: Union[str, None],
         access_key_id: Union[str, None],
         access_password: Union[str, None],
+        ssl_cer: Union[str, None],
     ):
         load_dotenv()
         self.api_url: Union[str, None] = os.getenv("api_url")
         self.access_key_id: Union[str, None] = os.getenv("access_key_id")
         self.access_password: Union[str, None] = os.getenv("access_password")
+        self.ssl_cer: Union[str, None] = os.getenv("ssl_cer")
 
 
-config: Config = Config(api_url=None, access_key_id=None, access_password=None)
+config: Config = Config(
+    api_url=None, access_key_id=None, access_password=None, ssl_cer=None
+)
