@@ -119,10 +119,14 @@ logger = logging.getLogger(__name__)
 class CallbackHandler(BaseHTTPRequestHandler):
     callback_responses: list[str] = []
 
+    @classmethod
+    def clear_responses(cls):
+        cls.callback_responses = []
+
     def do_GET(self):
         # Store the callback response
         CallbackHandler.callback_responses.append(self.path)
-        # Send a nice HTML response to the user
+        # Send a nice HTML response that explicitly tells the user to close the window
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
@@ -134,7 +138,14 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 padding-top: 50px;
             ">
                 <h2>Authentication Complete!</h2>
-                <p>You can close this window and return to the application.</p>
+                <p>Please close this window now. Do not refresh this page.</p>
+                <script>
+                    // Prevent back/forward navigation
+                    window.history.pushState(null, '', window.location.href);
+                    window.onpopstate = function () {
+                        window.history.pushState(null, '', window.location.href);
+                    };
+                </script>
             </body>
         </html>
         """
@@ -231,6 +242,8 @@ class LAClient:
     def _get_auth(
         self,
     ) -> tuple[Union[str, None], Union[str, None], list[str], Response]:
+        # Clear any previous responses
+        CallbackHandler.clear_responses()
         server = start_callback_server()
         auth_code: Union[str, None] = None
         email: Union[str, None] = None
@@ -302,9 +315,10 @@ class LAClient:
             )
 
         finally:
-            # Always shut down the server
+            # Always shut down the server and clear responses
             server.shutdown()
             server.server_close()
+            CallbackHandler.clear_responses()
 
     def login(self) -> Response:
         auth_code: Union[str, None]
