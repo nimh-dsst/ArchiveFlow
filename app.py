@@ -39,14 +39,10 @@ if "behavior_forms" not in ss:
 
 @st.cache_data
 def get_behavior_forms():
-    print("button clicked")
     assert ss.client.is_auth
-    print(ss.nbid)
     pages = ss.client.get_notebook_tree(nbid=ss.nbid)
-    print(len(pages))
     for page in pages:
         tree_id = page.find("tree-id")
-        print(tree_id)
         if isinstance(tree_id, ET.Element):
             tree_id_text = tree_id.text
             if isinstance(tree_id_text, str):
@@ -118,7 +114,6 @@ if ss.logged_in:
 
 if ss.nbid_radio and isinstance(ss.notebook_map, dict):
     ss.nbid = ss.notebook_map[ss.nbid_radio]
-    st.write(ss.nbid)
     st.button(
         "Search selected notebook for Behavior Entries",
         on_click=get_behavior_forms,
