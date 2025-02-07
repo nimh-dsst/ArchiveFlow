@@ -9,7 +9,7 @@ from hashlib import sha512
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Union, Literal
 from urllib.parse import parse_qs, quote_plus, urlencode, urlparse, urlunparse
 from xml.etree import ElementTree as ET
 
@@ -365,7 +365,7 @@ class LAClient:
         else:
             raise ValueError("No auth_code or email returned from get_auth")
 
-    def get_notebook_tree(
+    def get_all_pages(
         self,
         nbid: str,
         tree_id: str = "0",
@@ -432,7 +432,7 @@ class LAClient:
                         all_pages.append(node)
                     elif is_page_text == "false":
                         all_pages.extend(
-                            self.get_notebook_tree(
+                            self.get_all_pages(  # type: ignore
                                 nbid,
                                 node_tree_id_text,
                                 display_name_text,
@@ -474,4 +474,150 @@ class LAClient:
             )
         else:
             response = requests.get(url)
+        return response
+
+    def get_node_data(self, nbid: str, tree_id: str) -> Response:
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "get_node",
+            expires,
+            self.access_password,
+        )
+        url: str = (
+            self.api_url
+            + "/api/tree_tools/get_node"
+            + f"?uid={self.ua_info['id']}"
+            + f"&nbid={nbid}"
+            + f"&tree_id={tree_id}"
+            + f"&akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&sig={sig}"
+        )
+        if self.cer_filepath is not None:
+            response: Response = requests.get(
+                url, verify=str(self.cer_filepath)
+            )
+        else:
+            response = requests.get(url)
+        return response
+
+    def insert_node(
+        self,
+        nbid: str,
+        parent_tree_id: str,
+        display_text: str,
+        is_folder: Literal["true", "false"],
+    ) -> Response:
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "insert_node",
+            expires,
+            self.access_password,
+        )
+        url: str = (
+            self.api_url
+            + "/api/tree_tools/insert_node"
+            + f"?uid={self.ua_info['id']}"
+            + f"&nbid={nbid}"
+            + f"&parent_tree_id={parent_tree_id}"
+            + f"&display_text={display_text}"
+            + f"&is_folder={is_folder}"
+            + f"&akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&sig={sig}"
+        )
+        if self.cer_filepath is not None:
+            response: Response = requests.get(
+                url, verify=str(self.cer_filepath)
+            )
+        else:
+            response = requests.get(url)
+        return response
+
+    def add_attachment(
+        self,
+        filepath: Union[str, Path],
+        filename: Union[str, None] = None,
+        caption: Union[str, None] = None,
+        nbid: Union[str, None] = None,
+        pid: Union[str, None] = None,
+        change_description: Union[str, None] = None,
+        client_ip: Union[str, None] = None,
+    ) -> Response:
+        """
+        Upload a new attachment to the notebook.
+
+        Args:
+            filepath: Path to the file to upload
+            filename: Optional name for the file (defaults to filepath's name)
+            caption: Optional caption for the entry
+            nbid: Optional notebook ID to add the entry to
+            pid: Optional page ID within the notebook
+            change_description: Optional description of changes
+            client_ip: Optional IP address of the client
+
+        Returns:
+            Response object containing the server's response
+
+        Raises:
+            ValueError: If client is not authenticated or file doesn't exist
+            FileNotFoundError: If the specified file cannot be found
+        """
+        if not self.is_auth:
+            raise ValueError("Client is not authenticated")
+
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(f"File not found: {filepath}")
+
+        # Use provided filename or get from filepath
+        filename = filename or filepath.name
+
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "add_attachment",
+            expires,
+            self.access_password,
+        )
+
+        url: str = (
+            f"{self.api_url}/api/entries/add_attachment"
+            f"?uid={self.ua_info['id']}"
+            f"&filename={quote_plus(filename)}"
+            f"&akid={self.access_key_id}"
+            f"&expires={expires}"
+            f"&sig={sig}"
+        )
+
+        # Add optional parameters if provided
+        if caption:
+            url += f"&caption={quote_plus(caption)}"
+        if nbid:
+            url += f"&nbid={nbid}"
+        if pid:
+            url += f"&pid={pid}"
+        if change_description:
+            url += f"&change_description={quote_plus(change_description)}"
+        if client_ip:
+            url += f"&client_ip={quote_plus(client_ip)}"
+
+        # Read file in binary mode
+        with open(filepath, "rb") as file:
+            if self.cer_filepath is not None:
+                response: Response = requests.post(
+                    url,
+                    data=file,
+                    headers={"Content-Type": "application/octet-stream"},
+                    verify=str(self.cer_filepath),
+                )
+            else:
+                response = requests.post(
+                    url,
+                    data=file,
+                    headers={"Content-Type": "application/octet-stream"},
+                )
+
         return response
