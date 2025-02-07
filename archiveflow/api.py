@@ -621,3 +621,103 @@ class LAClient:
                 )
 
         return response
+
+    def get_attachment_last_uploaded_time(self, eid: str) -> Response:
+        """
+        Get the date and time that the specified attachment was last uploaded.
+
+        Args:
+            eid (str): ID of the entry/attachment to check
+
+        Returns:
+            Response: Server response containing the last upload time
+
+        Raises:
+            ValueError: If client is not authenticated
+        """
+        if not self.is_auth:
+            raise ValueError("Client is not authenticated")
+
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "attachment_last_uploaded_at",
+            expires,
+            self.access_password,
+        )
+        url: str = (
+            self.api_url
+            + "/api/entries/attachment_last_uploaded_at"
+            + f"?uid={self.ua_info['id']}"
+            + f"&eid={eid}"
+            + f"&akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&sig={sig}"
+        )
+
+        if self.cer_filepath is not None:
+            response: Response = requests.get(
+                url, verify=str(self.cer_filepath)
+            )
+        else:
+            response = requests.get(url)
+        return response
+
+    def get_entries_for_page(
+        self,
+        nbid: str,
+        page_tree_id: str,
+        entry_data: bool = False,
+        comment_data: bool = False,
+    ) -> Response:
+        """
+        Get a list of Entries that reside on a specific page.
+
+        Args:
+            nbid (str): Notebook ID whose tree is to be traversed
+            page_tree_id (str): ID of the page of interest
+            entry_data (bool, optional): Include entry data in response. Defaults to False.
+            comment_data (bool, optional): Include comment data in response. Defaults to False.
+
+        Returns:
+            Response: Server response containing the entries for the specified page
+
+        Raises:
+            ValueError: If client is not authenticated
+        """
+        if not self.is_auth:
+            raise ValueError("Client is not authenticated")
+
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "get_entries_for_page",
+            expires,
+            self.access_password,
+        )
+        url: str = (
+            self.api_url
+            + "/api/tree_tools/get_entries_for_page"
+            + f"?uid={self.ua_info['id']}"
+            + f"&page_tree_id={page_tree_id}"
+            + f"&nbid={nbid}"
+        )
+
+        if entry_data:
+            url += "&entry_data=true"
+        if comment_data:
+            url += "&comment_data=true"
+
+        url += (
+            f"&akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&sig={sig}"
+        )
+
+        if self.cer_filepath is not None:
+            response: Response = requests.get(
+                url, verify=str(self.cer_filepath)
+            )
+        else:
+            response = requests.get(url)
+        return response
