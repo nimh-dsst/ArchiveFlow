@@ -40,7 +40,7 @@ if "behavior_forms" not in ss:
 @st.cache_data
 def get_behavior_forms():
     assert ss.client.is_auth
-    pages = ss.client.get_notebook_tree(nbid=ss.nbid)
+    pages = ss.client.get_all_pages(nbid=ss.nbid)
     for page in pages:
         tree_id = page.find("tree-id")
         if isinstance(tree_id, ET.Element):
