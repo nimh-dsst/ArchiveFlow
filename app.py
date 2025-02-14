@@ -132,6 +132,11 @@ if ss.behavior_forms:
         else:
             do_write = st.button("Write Behavior Data")
             if do_write:
+                # TODO: parse the existing folder provided by the user
+                # compare with the existing directory structure in the notebook
+                # warn user of any discrepancies
+                # if discrepancies, ask user if they want to proceed
+                # populate the local with updates from the API
                 for form in ss.behavior_forms:
                     form_path = root_path.joinpath(
                         form.metadata["Date"].replace("/", "_")
