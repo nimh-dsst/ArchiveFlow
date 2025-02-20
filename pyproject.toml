@@ -1,0 +1,26 @@
+[project]
+name = "archiveflow"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+    "streamlit>=1.41.1",
+    "watchdog>=6.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.1.1",
+    "ipython>=8.18.1",
+    "isort>=5.13.2",
+    "mypy>=1.13.0",
+    "pandas-stubs>=2.2.3.241126",
+    "pytest>=8.3.4",
+    "ruff>=0.8.3",
+    "types-requests>=2.32.0.20241016",
+]
