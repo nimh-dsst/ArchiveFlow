@@ -20,7 +20,7 @@ def create_tejeda_structure(root_dir: Path):
 
     tejeda: dict[Any, Any] = {
         "root": {
-            "Behavior": {  # TODO remove cohorts folder. just use a list here
+            "Behavior": {
                 "Cohort 1": {
                     "Videos": {
                         "subject id": None,
@@ -33,11 +33,15 @@ def create_tejeda_structure(root_dir: Path):
             "Metadata": None,
             "Photometry": {
                 "Cohort 1": {
-                    "Tanks": [{"Day 1": None}, {"Day 2": None}],
+                    "Tanks": {
+                        "Day 1": None,
+                        "Day 2": None,
+                    },
                     "Analysis": None,
                 }
             },
             "Surgeries": {"Cohort 1": None},
+            # Each day you do surgery, you have a surgery file. File contains multiple animals.
         }
     }
 
