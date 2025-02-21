@@ -33,8 +33,7 @@ def create_tejeda_structure(root_dir: Path):
             "Metadata": None,
             "Photometry": {
                 "Cohort 1": {
-                    "Tanks": None,
-                    "Signal CSVs": [{"Day 1": None}, {"Day 2": None}],
+                    "Tanks": [{"Day 1": None}, {"Day 2": None}],
                     "Analysis": None,
                 }
             },
