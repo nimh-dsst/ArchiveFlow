@@ -20,25 +20,25 @@ def create_tejeda_structure(root_dir: Path):
 
     tejeda: dict[Any, Any] = {
         "root": {
-            "Behavior": {
-                "Cohorts": {
-                    "Cohort 1": {
-                        "Videos": {
-                            "subject id": None,
-                            "nomenclature": None,
-                            "run id": None,
-                        }
-                    }
+            "Behavior": {  # TODO remove cohorts folder. just use a list here
+                "Cohort 1": {
+                    "Videos": {
+                        "subject id": None,
+                        "nomenclature": None,
+                        "run id": None,
+                    },
                 }
-            },
-            "Histology": {"Cohorts": {"Cohort 1": None}},
+            },  # In Behavior, put anymaze file.
+            "Histology": {"Cohort 1": None},  # TODO remove cohorts folder
             "Metadata": None,
             "Photometry": {
-                "Cohorts": {
-                    "Cohort 1": {"TDT Binaries": None, "Analysis": None}
+                "Cohort 1": {
+                    "Tanks": None,
+                    "Signal CSVs": [{"Day 1": None}, {"Day 2": None}],
+                    "Analysis": None,
                 }
             },
-            "Surgeries": {"Cohorts": {"Cohort 1": None}},
+            "Surgeries": {"Cohort 1": None},
         }
     }
 
