@@ -6,54 +6,119 @@ from typing import Literal
 from archiveflow.api import LAClient
 
 
-class TejedaBehavior:
+class TejedaDataDirectory:
     """
-    Class to create the structure of a Tejeda lab behavior experiment and
+    Class to create the structure of a Tejeda lab data directory and
     compare to LabArchive entry.
     """
 
-    def __init__(self, behavior_root_dir: Path, tree_id: str):
+    def __init__(
+        self,
+        data_dir_root_dir: Path,
+        client: LAClient,
+        nbid: str,
+        tree_id: str,
+        tree_name: str,
+        parent_experiment: ET.Element,
+    ):
+        parent_tree_name: str | None = parent_experiment.findtext(
+            "display-text"
+        )
+        if isinstance(parent_tree_name, str):
+            cohort_nodes: list[ET.Element] = client.get_dir_nodes(
+                nbid, tree_id, tree_name, parent_tree_name=parent_tree_name
+            )
+        else:
+            raise ValueError("No display-text found for parent experiment")
         # initialize attributes
         # these are the types of subdirectories in the behavior directory
-        self.cohorts: list[Path] = []
-        self.videos: list[Path] = []
+        self.cohorts: list[str] = []
         cohort_pattern: re.Pattern[str] = re.compile(
             r"Cohort \d+\s*", re.IGNORECASE
         )
-        videos_pattern: re.Pattern[str] = re.compile(r"Videos", re.IGNORECASE)
-        self.behavior_root_dir = behavior_root_dir
-        # examine names of subdirectories
-        self.subdirs = self.behavior_root_dir.iterdir()
-        for subdir in self.subdirs:
-            if subdir.is_dir():
-                # if the subdirectory name matches the cohort pattern, then
-                # it is a cohort directory
-                match: re.Match[str] | None = cohort_pattern.match(subdir.name)
-                if match:
-                    self.cohorts.append(subdir)
-                    for subsubdir in subdir.iterdir():
-                        # check if the sub-subdir is a directory
-                        if subsubdir.is_dir():
-                            # check if the sub-subdir is the videos directory
-                            if videos_pattern.match(subsubdir.name):
-                                # if it is, then add it to the videos_dir
-                                # attribute
-                                self.videos.append(subsubdir)
-                            else:
-                                raise ValueError(
-                                    f"Invalid subdirectory name: {subsubdir}"
-                                )
+        self.data_dir_root_dir = data_dir_root_dir
+        # examine names of cohort directories
+        for node in cohort_nodes:
+            name: str | None = node.findtext("display-text")
+            if isinstance(name, str):
+                if cohort_pattern.match(name):
+                    self.cohorts.append(name)
                 else:
                     raise ValueError(
-                        f"Invalid subdirectory name: {subdir}."
-                        + " Please use 'Cohort X' pattern"
+                        f"Invalid cohort directory name: {name}. "
+                        + " Please correct in LabArchives"
                     )
 
-    def return_videos(self) -> list[Path]:
-        return self.videos
+    def create_cohorts(self):
+        for cohort in self.cohorts:
+            cohort_dir = self.data_dir_root_dir.joinpath(cohort)
+            cohort_dir.mkdir(exist_ok=True)
 
-    def return_cohort_dirs(self) -> list[Path]:
-        return self.cohorts
+
+class TejedaBehavior(TejedaDataDirectory):
+    """
+    Class to create the structure of a Tejeda lab behavior directory and
+    compare to LabArchive entry.
+    """
+
+    def __init__(
+        self,
+        data_dir_root_dir: Path,
+        client: LAClient,
+        nbid: str,
+        tree_id: str,
+        tree_name: str,
+        parent_experiment: ET.Element,
+    ):
+        super().__init__(
+            data_dir_root_dir,
+            client,
+            nbid,
+            tree_id,
+            tree_name,
+            parent_experiment,
+        )
+
+    def create_cohorts(self):
+        for cohort in self.cohorts:
+            cohort_dir = self.data_dir_root_dir.joinpath(cohort)
+            cohort_dir.mkdir(exist_ok=True)
+            videos_dir = cohort_dir.joinpath("Videos")
+            videos_dir.mkdir(exist_ok=True)
+
+
+class TejedaPhotometry(TejedaDataDirectory):
+    """
+    Class to create the structure of a Tejeda lab photometry directory and
+    compare to LabArchive entry.
+    """
+
+    def __init__(
+        self,
+        data_dir_root_dir: Path,
+        client: LAClient,
+        nbid: str,
+        tree_id: str,
+        tree_name: str,
+        parent_experiment: ET.Element,
+    ):
+        super().__init__(
+            data_dir_root_dir,
+            client,
+            nbid,
+            tree_id,
+            tree_name,
+            parent_experiment,
+        )
+
+    def create_cohorts(self):
+        for cohort in self.cohorts:
+            cohort_dir = self.data_dir_root_dir.joinpath(cohort)
+            cohort_dir.mkdir(exist_ok=True)
+            tanks_dir = cohort_dir.joinpath("Tanks")
+            tanks_dir.mkdir(exist_ok=True)
+            analysis_dir = cohort_dir.joinpath("Analysis")
+            analysis_dir.mkdir(exist_ok=True)
 
 
 class TejedaExperiment:
@@ -67,13 +132,18 @@ class TejedaExperiment:
         experiment_root_dir: Path,
         client: LAClient,
         nbid: str,
-        tree_id: str,
+        experiment: ET.Element,
         make_method: Literal["All", "Existing"],
     ):
         self.experiment_root_dir = experiment_root_dir
         self.client = client
         self.nbid = nbid
-        self.tree_id = tree_id
+        self.experiment = experiment
+        tree_id: str | None = self.experiment.findtext("tree-id")
+        if isinstance(tree_id, str):
+            self.tree_id = tree_id
+        else:
+            raise ValueError("No tree-id found for experiment")
         self.make_method = make_method
         self.first_level_dirs = [
             "Behavior",
@@ -85,10 +155,84 @@ class TejedaExperiment:
         self.dir_nodes: list[ET.Element] = self.client.get_dir_nodes(
             self.nbid, self.tree_id
         )
+
         # TODO: iterate over the dir_nodes and create the subclasses
         # for each type of subdirectory
+        self.behavior: TejedaBehavior | None = None
+        self.histology: TejedaDataDirectory | None = None
+        self.metadata: TejedaDataDirectory | None = None
+        self.photometry: TejedaPhotometry | None = None
+        self.surgeries: TejedaDataDirectory | None = None
+        for node in self.dir_nodes:
+            name: str | None = node.findtext("display-text")
+            if isinstance(name, str):
+                if name.capitalize() == "Behavior":
+                    behavior_tree_id: str | None = node.findtext("tree-id")
+                    if isinstance(behavior_tree_id, str):
+                        self.behavior = TejedaBehavior(
+                            data_dir_root_dir=self.experiment_root_dir.joinpath(
+                                "Behavior"
+                            ),
+                            client=self.client,
+                            nbid=self.nbid,
+                            tree_id=behavior_tree_id,
+                            tree_name=name,
+                            parent_experiment=self.experiment,
+                        )
+                elif name.capitalize() == "Histology":
+                    histology_tree_id: str | None = node.findtext("tree-id")
+                    if isinstance(histology_tree_id, str):
+                        self.histology = TejedaDataDirectory(
+                            data_dir_root_dir=self.experiment_root_dir.joinpath(
+                                "Histology"
+                            ),
+                            client=self.client,
+                            nbid=self.nbid,
+                            tree_id=histology_tree_id,
+                            tree_name=name,
+                            parent_experiment=self.experiment,
+                        )
+                elif name.capitalize() == "Metadata":
+                    metadata_tree_id: str | None = node.findtext("tree-id")
+                    if isinstance(metadata_tree_id, str):
+                        self.metadata = TejedaDataDirectory(
+                            data_dir_root_dir=self.experiment_root_dir.joinpath(
+                                "Metadata"
+                            ),
+                            client=self.client,
+                            nbid=self.nbid,
+                            tree_id=metadata_tree_id,
+                            tree_name=name,
+                            parent_experiment=self.experiment,
+                        )
+                elif name.capitalize() == "Photometry":
+                    photometry_tree_id: str | None = node.findtext("tree-id")
+                    if isinstance(photometry_tree_id, str):
+                        self.photometry = TejedaPhotometry(
+                            data_dir_root_dir=self.experiment_root_dir.joinpath(
+                                "Photometry"
+                            ),
+                            client=self.client,
+                            nbid=self.nbid,
+                            tree_id=photometry_tree_id,
+                            tree_name=name,
+                            parent_experiment=self.experiment,
+                        )
+                elif name.capitalize() == "Surgeries":
+                    surgeries_tree_id: str | None = node.findtext("tree-id")
+                    if isinstance(surgeries_tree_id, str):
+                        self.surgeries = TejedaDataDirectory(
+                            data_dir_root_dir=self.experiment_root_dir.joinpath(
+                                "Surgeries"
+                            ),
+                            client=self.client,
+                            nbid=self.nbid,
+                            tree_id=surgeries_tree_id,
+                            tree_name=name,
+                            parent_experiment=self.experiment,
+                        )
 
-    def create_structure(self: "TejedaExperiment"):
+    def create_experiment_dirs(self: "TejedaExperiment"):
         """
         Create the structure of the Tejeda archive.
         """
@@ -117,63 +261,7 @@ class TejedaExperiment:
                         else:
                             raise ValueError(
                                 f"Invalid subdirectory name: {name}"
+                                + " Please correct in LabArchives"
                             )
                     else:
                         raise ValueError(f"No display-text for node: {node}")
-
-
-# def create_tejeda_structure(root_dir: Path):
-#     """
-#     Create the structure of the Tejeda archive.
-#     """
-
-#     def create_structure(current_path: Path, structure: dict[Any, Any]):
-#         """
-#         Recursive helper function to create nested directory structure.
-#         """
-#         for key, value in structure.items():
-#             path = current_path / key
-#             path.mkdir(exist_ok=True)
-
-#             if isinstance(value, dict):
-#                 create_structure(path, value)
-
-#     tejeda: dict[Any, Any] = {
-#         "Experiment": {
-#             "Behavior": {
-#                 "Cohort 1": {
-#                     "Videos": {
-#                         "subject id": None,
-#                         "nomenclature": None,
-#                         "run id": None,
-#                     },
-#                 }
-#             },  # In Behavior, put anymaze file.
-#             "Histology": {"Cohort 1": None},
-#             "Metadata": None,
-#             "Photometry": {
-#                 "Cohort 1": {
-#                     "Tanks": {
-#                         "Day 1": None,
-#                         "Day 2": None,
-#                     },
-#                     "Analysis": None,
-#                 }
-#             },
-#             "Surgeries": {"Cohort 1": None},
-#             # Each day you do surgery, you have a surgery file.
-#             # File contains multiple animals.
-#         }
-#     }
-
-#     # Create the root directory and build structure
-#     root_path = Path(root_dir)
-#     root_path.mkdir(exist_ok=True)
-
-#     # Start the recursive creation with the root structure
-#     create_structure(root_path, tejeda["Experiment"])
-#     return None
-
-
-# if __name__ == "__main__":
-#     create_tejeda_structure(Path("./example_experiment"))
