@@ -365,6 +365,85 @@ class LAClient:
         else:
             raise ValueError("No auth_code or email returned from get_auth")
 
+    def get_dir_nodes(
+        self,
+        nbid: str,
+        tree_id: str = "0",
+        tree_name: str = "root",
+        parent_tree_name: str = "",
+    ) -> list[ET.Element]:
+        """
+        Get nodes in the tree of a given level. Not recursive.
+        """
+        if not self.is_auth or not isinstance(self.email, str):
+            raise ValueError("Client is not authenticated")
+        all_dir_nodes: list[ET.Element] = []
+        full_path: str = (
+            parent_tree_name + "/" + tree_name
+            if parent_tree_name
+            else tree_name
+        )
+        expires: int = int(time.time()) * 1000
+        sig: str = generate_signature(
+            self.access_key_id,
+            "get_tree_level",
+            expires,
+            self.access_password,
+        )
+        url: str = (
+            self.api_url
+            + "/api/tree_tools/get_tree_level"
+            + f"?uid={self.ua_info['id']}"
+            + f"&nbid={nbid}"
+            + f"&parent_tree_id={tree_id}"
+            + f"&akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&sig={sig}"
+        )
+        if self.cer_filepath is not None:
+            response: Response = requests.get(
+                url, verify=str(self.cer_filepath)
+            )
+        else:
+            response = requests.get(url)
+        tree: ET.ElementTree = ET.parse(BytesIO(response.content))
+        root: ET.Element = tree.getroot()
+        nodes: list[ET.Element] = root.findall(".//level-node")
+        for node in nodes:
+            node_tree_id: ET.Element | None = node.find("tree-id")
+            if isinstance(node_tree_id, ET.Element):
+                node_tree_id_text: str | None = node_tree_id.text
+                if node_tree_id_text is None:
+                    raise ValueError("Node tree_id has no text!")
+            else:
+                raise ValueError("Node is missing tree-id element")
+            display_name: ET.Element | None = node.find("display-text")
+            is_page: ET.Element | None = node.find("is-page")
+            if isinstance(is_page, ET.Element):
+                is_page_text: str | None = is_page.text
+                if is_page_text is None:
+                    raise ValueError("Node is-page element text is missing!")
+            else:
+                raise ValueError("Node is missing is-page element!")
+            if isinstance(display_name, ET.Element):
+                display_name_text: str | None = display_name.text
+                if display_name_text:
+                    if is_page_text == "false":
+                        node.set(
+                            "full_path", full_path + "/" + display_name_text
+                        )
+                        all_dir_nodes.append(node)
+                    elif is_page_text == "true":
+                        pass
+                    else:
+                        raise ValueError(
+                            f"Node: {display_name_text} has is-page"
+                            + f" value of {is_page_text}"
+                        )
+            else:
+                raise ValueError("Node is missing display text!")
+        return all_dir_nodes
+
     def get_all_pages(
         self,
         nbid: str,
@@ -372,6 +451,9 @@ class LAClient:
         tree_name: str = "root",
         parent_tree_name: str = "",
     ) -> list[ET.Element]:
+        """
+        Get all pages in the tree recursively.
+        """
         if not self.is_auth or not isinstance(self.email, str):
             raise ValueError("Client is not authenticated")
         all_pages: list[ET.Element] = []
