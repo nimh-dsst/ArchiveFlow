@@ -274,7 +274,7 @@ class LAClient:
             login_url: str = self.generate_login_url(redirect_uri, expires)
             # Open the browser for user authentication
             print("Opening browser for authentication...")
-            webbrowser.open(login_url)
+            webbrowser.open_new(login_url + "&no_cookies=1")
             # Wait for callback (with timeout)
             timeout = (
                 time.time() + 300
@@ -337,7 +337,7 @@ class LAClient:
             )
         elif isinstance(auth_code, str) and isinstance(email, str):
             callbacks = ["streamlit-based login"]
-            auth_response = "streamlist-based login"
+            auth_response = "streamlit-based login"
         else:
             raise ValueError("Invalid auth_code or email")
         if isinstance(auth_code, str) and isinstance(email, str):
