@@ -4,7 +4,6 @@ from xml.etree import ElementTree as ET
 from xml.etree.ElementTree import Element
 
 import streamlit as st
-from requests.exceptions import SSLError
 from streamlit import session_state as ss
 
 from archiveflow.api import LAClient
@@ -12,10 +11,6 @@ from archiveflow.config import config
 from archiveflow.structure import TejedaExperiment
 
 # Session state variables
-if "logged_in" not in ss:
-    ss.logged_in = False
-if "button_auth" not in ss:
-    ss.button_auth = False
 if "client" not in ss:
     ss.client = None
 if "notebook_map" not in ss:
@@ -47,6 +42,12 @@ if "folder_select" not in ss:
 if "method" not in ss:
     method: str | None = None
     ss.method = method
+if "app_host" not in ss:
+    if config.app_host is not None:
+        app_host: str = config.app_host
+        ss.app_host = app_host
+    else:
+        raise ValueError("app_host is not set in config")
 
 
 def get_experiment_nodes() -> None:
@@ -63,65 +64,77 @@ def get_experiment_nodes() -> None:
 
 st.title("Tejeda Lab")
 st.header("Experiment Directory Creator")
-if not ss.logged_in:
-    ss.button_auth = st.button("Login to Lab Archives")
-if ss.button_auth:
+# if the client is not set or not authenticated
+# generate the client and login url
+if ss.client is None or not ss.client.is_auth:
+    print("Generating client")
+    # if the ssl cert is set in config
     if isinstance(config.ssl_cer, str):
+        # check if the cert exists
         cer_path: Path = Path(config.ssl_cer)
         if cer_path.exists():
             # first try with the cert
-            try:
-                ss.client = LAClient(cer_filepath=cer_path)
-                ss.client.login()
-            # fall back not using the cert
-            except Exception:
-                ss.client = LAClient()
-                ss.client.login()
+            print("Using cert")
+            ss.client = LAClient(cer_filepath=cer_path)
         else:
-            # if no cert in config can be found on machine
-            # first try without cert then raise error
-            try:
-                ss.client = LAClient()
-                ss.client.login()
-            except SSLError:
-                raise SSLError(
-                    "Configured SSL Certificate was not found!"
-                    + "Attempted login without certificate failed!"
-                )
-    else:
-        try:
+            # if the cert does not exist, try without it
+            print("No cert found, using default client")
             ss.client = LAClient()
-            ss.client.login()
-        except SSLError:
-            raise SSLError(
-                "SSL failed and no SSL Certificate found in config!"
-            )
-    # if you have made it here
-    # you aree logged in!
-    ss.logged_in = True
-    ss.button_auth = False
-    for notebook in ss.client.ua_info["notebooks"]:
-        ss.notebook_map[notebook["name"]] = notebook["id"]
-    if len(ss.notebook_map) == 0:
-        st.warning(
-            "No notebooks found! Archive Flow"
-            + " requires at least one notebook."
+    else:
+        # if no cert in config can be found on machine
+        print("No cert in config, using default client")
+        ss.client = LAClient()
+
+    if "auth_code" in st.query_params and "email" in st.query_params:
+        print("Attempting to login")
+        ss.client.login(
+            auth_code=st.query_params["auth_code"],
+            email=st.query_params["email"],
         )
-if ss.logged_in:
+        st.query_params.clear()
+        st.rerun()
+    # Now the client is set and we can generate the login url
+    # Get the host URI from streamlit for the redirect
+    print("Generating login url")
+    login_url = ss.client.generate_login_url(
+        ss.app_host, int(time.time()) * 1000
+    )
+    st.html(
+        f'<a href="{login_url}"'
+        + ' target="_self" rel="nofollow noopener noreferrer">'
+        + "Login to LabArchives</a>"
+    )
+    # show the login url and stop the app
+    print(f"client is auth: {ss.client.is_auth}")
+    print("Stopping app")
+    st.stop()
 
-    # def on_selectbox_change():
-    #     if ss.nbid_radio:
-    #         ss.nbid = ss.notebook_map[ss.nbid_radio]
+# if you have made it here you
+# get the notebooks from the client
+print("Getting notebooks")
+for notebook in ss.client.ua_info["notebooks"]:
+    ss.notebook_map[notebook["name"]] = notebook["id"]
+if len(ss.notebook_map) == 0:
+    st.warning(
+        "No notebooks found!"
+        + "Application requires access to at least one notebook."
+    )
 
-    ss.nbid_radio = st.selectbox("Notebooks", ss.notebook_map.keys())
+# select the notebook
+print("Prompting for notebook selection")
+ss.nbid_radio = st.selectbox("Notebooks", ss.notebook_map.keys())
 
+# if the notebook is selected, get the experiment nodes
+print("Getting experiments")
 if ss.nbid_radio and isinstance(ss.notebook_map, dict):
     ss.nbid = ss.notebook_map[ss.nbid_radio]
     st.button(
-        "Get Project ",
+        "Get Project",
         on_click=get_experiment_nodes,
     )
 
+# if the experiments are found, select the experiment
+print("Prompting for experiment selection")
 if len(ss.experiments) > 0:
     ss.experiment_radio = st.selectbox(
         "Experiments",
@@ -129,6 +142,7 @@ if len(ss.experiments) > 0:
         on_change=get_experiment_nodes,
     )
 
+print("Prompting for make method selection")
 if ss.experiment_radio:
     ss.method = st.radio("Make Method", ["Existing", "All"])
     if ss.method == "All":
@@ -138,6 +152,7 @@ if ss.experiment_radio:
         )
     elif ss.method == "Existing":
         st.text("Folders existing in LabArchives will be created.")
+    print("Prompting for folder selection")
     if st.button("Select Folder"):
         ss.folder_select = True
     if ss.folder_select:
