@@ -126,7 +126,8 @@ class CallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # Store the callback response
         CallbackHandler.callback_responses.append(self.path)
-        # Send a nice HTML response that explicitly tells the user to close the window
+        # Send a nice HTML response that explicitly
+        # tells the user to close the window
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
@@ -143,7 +144,9 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     // Prevent back/forward navigation
                     window.history.pushState(null, '', window.location.href);
                     window.onpopstate = function () {
-                        window.history.pushState(null, '', window.location.href);
+                        window.history.pushState(
+                            null, '', window.location.href
+                        );
                     };
                 </script>
             </body>
@@ -772,11 +775,14 @@ class LAClient:
         Args:
             nbid (str): Notebook ID whose tree is to be traversed
             page_tree_id (str): ID of the page of interest
-            entry_data (bool, optional): Include entry data in response. Defaults to False.
-            comment_data (bool, optional): Include comment data in response. Defaults to False.
+            entry_data (bool, optional): Include entry data in response.
+                Defaults to False.
+            comment_data (bool, optional): Include comment data in response.
+                Defaults to False.
 
         Returns:
-            Response: Server response containing the entries for the specified page
+            Response: Server response containing the entries for the
+            specified page
 
         Raises:
             ValueError: If client is not authenticated
