@@ -126,7 +126,8 @@ class CallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # Store the callback response
         CallbackHandler.callback_responses.append(self.path)
-        # Send a nice HTML response that explicitly tells the user to close the window
+        # Send a nice HTML response that explicitly
+        # tells the user to close the window
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
@@ -143,7 +144,9 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     // Prevent back/forward navigation
                     window.history.pushState(null, '', window.location.href);
                     window.onpopstate = function () {
-                        window.history.pushState(null, '', window.location.href);
+                        window.history.pushState(
+                            null, '', window.location.href
+                        );
                     };
                 </script>
             </body>
@@ -239,7 +242,28 @@ class LAClient:
         self.email: Union[str, None] = None
         self.uid: Union[str, None] = None
 
-    def _get_auth(
+    def generate_login_url(self, redirect_uri: str, expires: int) -> str:
+        url_encoded_uri: str = quote_plus(redirect_uri)
+        # Generate the signature
+        # NOTE: the api_user_login is special as it requires
+        # the redict_uri to inputted NOT the string "api_user_login"
+        signature: str = generate_signature(
+            self.access_key_id,
+            redirect_uri,
+            expires,
+            self.access_password,
+        )
+        login_url: str = (
+            f"{self.api_url}"
+            + "/api_user_login"
+            + f"?akid={self.access_key_id}"
+            + f"&expires={expires}"
+            + f"&redirect_uri={url_encoded_uri}"
+            + f"&sig={signature}"
+        )
+        return login_url
+
+    def _get_auth_callback(
         self,
     ) -> tuple[Union[str, None], Union[str, None], list[str], Response]:
         # Clear any previous responses
@@ -250,29 +274,10 @@ class LAClient:
         try:
             expires: int = int(time.time()) * 1000
             redirect_uri: str = "http://localhost:8000/callback"
-            url_encoded_uri: str = quote_plus(redirect_uri)
-
-            # Generate the signature
-            # NOTE: the api_user_login is special as it requires
-            # the redict_uri to inputted NOT the string "api_user_login"
-            signature: str = generate_signature(
-                self.access_key_id,
-                redirect_uri,
-                expires,
-                self.access_password,
-            )
-            login_url: str = (
-                f"{self.api_url}"
-                + "/api_user_login"
-                + f"?akid={self.access_key_id}"
-                + f"&expires={expires}"
-                + f"&redirect_uri={url_encoded_uri}"
-                + f"&sig={signature}"
-            )
+            login_url: str = self.generate_login_url(redirect_uri, expires)
             # Open the browser for user authentication
             print("Opening browser for authentication...")
-            webbrowser.open(login_url)
-
+            webbrowser.open_new(login_url + "&no_cookies=1")
             # Wait for callback (with timeout)
             timeout = (
                 time.time() + 300
@@ -306,7 +311,9 @@ class LAClient:
                 )
             else:
                 response = requests.get(login_url)
-
+            server.shutdown()
+            server.server_close()
+            CallbackHandler.clear_responses()
             return (
                 auth_code,
                 email,
@@ -320,12 +327,22 @@ class LAClient:
             server.server_close()
             CallbackHandler.clear_responses()
 
-    def login(self) -> Response:
-        auth_code: Union[str, None]
-        email: Union[str, None]
-        callbacks: list[str]
-        auth_response: Response
-        auth_code, email, callbacks, auth_response = self._get_auth()
+    def login(
+        self,
+        auth_code: Union[str, None] = None,
+        email: Union[str, None] = None,
+    ) -> Response:
+        if auth_code is None and email is None:
+            callbacks: list[str]
+            auth_response: Union[Response, str]
+            auth_code, email, callbacks, auth_response = (
+                self._get_auth_callback()
+            )
+        elif isinstance(auth_code, str) and isinstance(email, str):
+            callbacks = ["streamlit-based login"]
+            auth_response = "streamlit-based login"
+        else:
+            raise ValueError("Invalid auth_code or email")
         if isinstance(auth_code, str) and isinstance(email, str):
             masked_callbacks: list[str] = [
                 mask_sensitive_url(callback) for callback in callbacks
@@ -758,11 +775,14 @@ class LAClient:
         Args:
             nbid (str): Notebook ID whose tree is to be traversed
             page_tree_id (str): ID of the page of interest
-            entry_data (bool, optional): Include entry data in response. Defaults to False.
-            comment_data (bool, optional): Include comment data in response. Defaults to False.
+            entry_data (bool, optional): Include entry data in response.
+                Defaults to False.
+            comment_data (bool, optional): Include comment data in response.
+                Defaults to False.
 
         Returns:
-            Response: Server response containing the entries for the specified page
+            Response: Server response containing the entries for the
+            specified page
 
         Raises:
             ValueError: If client is not authenticated
