@@ -6,6 +6,46 @@ from typing import Literal
 from archiveflow.api import LAClient
 
 
+class TejedaCohortDirectory:
+    """
+    Class to create the structure of a Tejeda lab cohort directory and
+    compare to LabArchive entry.
+    """
+
+    def _get_pages(self) -> list[ET.Element]:
+        """
+        Get the pages for the cohort directory.
+        """
+        cohort_name: str | None = self.parent_experiment.findtext(
+            "display-text"
+        )
+        if isinstance(cohort_name, str):
+            return self.client.get_all_pages(
+                self.nbid,
+                self.tree_id,
+                self.tree_name,
+                cohort_name,
+            )
+        else:
+            raise ValueError("No display-text found for parent experiment")
+
+    def __init__(
+        self,
+        data_dir_root_dir: Path,
+        client: LAClient,
+        nbid: str,
+        tree_id: str,
+        tree_name: str,
+        parent_experiment: ET.Element,
+    ):
+        self.client: LAClient = client
+        self.nbid: str = nbid
+        self.tree_id: str = tree_id
+        self.tree_name: str = tree_name
+        self.parent_experiment: ET.Element = parent_experiment
+        self.pages: list[ET.Element] = self._get_pages()
+
+
 class TejedaDataDirectory:
     """
     Class to create the structure of a Tejeda lab data directory and
@@ -21,6 +61,11 @@ class TejedaDataDirectory:
         tree_name: str,
         parent_experiment: ET.Element,
     ):
+        self.client: LAClient = client
+        self.nbid: str = nbid
+        self.tree_id: str = tree_id
+        self.tree_name: str = tree_name
+        self.parent_experiment: ET.Element = parent_experiment
         parent_tree_name: str | None = parent_experiment.findtext(
             "display-text"
         )
@@ -32,7 +77,8 @@ class TejedaDataDirectory:
             raise ValueError("No display-text found for parent experiment")
         # initialize attributes
         # these are the types of subdirectories in the behavior directory
-        self.cohorts: list[str] = []
+        self.cohorts: list[ET.Element] = []
+        self.cohort_names: list[str] = []
         cohort_pattern: re.Pattern[str] = re.compile(
             r"Cohort \d+\s*", re.IGNORECASE
         )
@@ -42,7 +88,8 @@ class TejedaDataDirectory:
             name: str | None = node.findtext("display-text")
             if isinstance(name, str):
                 if cohort_pattern.match(name):
-                    self.cohorts.append(name)
+                    self.cohorts.append(node)
+                    self.cohort_names.append(name)
                 else:
                     raise ValueError(
                         f"Invalid cohort directory name: {name}. "
@@ -50,8 +97,8 @@ class TejedaDataDirectory:
                     )
 
     def create_cohorts(self):
-        for cohort in self.cohorts:
-            cohort_dir = self.data_dir_root_dir.joinpath(cohort)
+        for cohort_name in self.cohort_names:
+            cohort_dir = self.data_dir_root_dir.joinpath(cohort_name)
             cohort_dir.mkdir(exist_ok=True)
 
 
@@ -80,8 +127,8 @@ class TejedaBehavior(TejedaDataDirectory):
         )
 
     def create_cohorts(self):
-        for cohort in self.cohorts:
-            cohort_dir = self.data_dir_root_dir.joinpath(cohort)
+        for cohort_name in self.cohort_names:
+            cohort_dir = self.data_dir_root_dir.joinpath(cohort_name)
             cohort_dir.mkdir(exist_ok=True)
             videos_dir = cohort_dir.joinpath("Videos")
             videos_dir.mkdir(exist_ok=True)
@@ -112,8 +159,8 @@ class TejedaPhotometry(TejedaDataDirectory):
         )
 
     def create_cohorts(self):
-        for cohort in self.cohorts:
-            cohort_dir = self.data_dir_root_dir.joinpath(cohort)
+        for cohort_name in self.cohort_names:
+            cohort_dir = self.data_dir_root_dir.joinpath(cohort_name)
             cohort_dir.mkdir(exist_ok=True)
             tanks_dir = cohort_dir.joinpath("Tanks")
             tanks_dir.mkdir(exist_ok=True)
