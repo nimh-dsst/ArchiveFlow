@@ -131,5 +131,5 @@ if not ss.is_logged_in:
             print("Stopping app")
             st.stop()
 else:
-    st.text("You are logged in!")
+    st.success("You are logged in!")
     st.stop()
